@@ -185,6 +185,7 @@ export default class ServerSchema extends BaseUISchema {
       host: '',
       port: 5432,
       db: 'postgres',
+      server_type: 'pg',
       username: current_user.name,
       role: null,
       connect_now: true,
@@ -263,8 +264,24 @@ export default class ServerSchema extends BaseUISchema {
       },
       {
         id: 'server_type', label: gettext('Server type'), type: 'select',
-        mode: ['properties'], visible: obj.isConnected,
+        mode: ['properties', 'create', 'edit'],
         options: supportedServers,
+        helpMessage: gettext(
+          'Select Oracle to connect to an Oracle database. The maintenance database holds the service name (e.g. orcl).'),
+        disabled: obj.isConnected,
+        deps: ['server_type'],
+        depChange: (state, source)=>{
+          if(source[0] == 'server_type' && state.server_type == 'oracle') {
+            let res = {};
+            if(state.port == 5432) {
+              res['port'] = 1521;
+            }
+            if(!state.db || state.db == 'postgres') {
+              res['db'] = 'orcl';
+            }
+            return res;
+          }
+        },
       }, {
         id: 'connected', label: gettext('Connected?'), type: 'switch',
         mode: ['properties'], group: gettext('Connection'),

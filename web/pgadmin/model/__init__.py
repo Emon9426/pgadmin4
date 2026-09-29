@@ -315,6 +315,9 @@ class Server(db.Model, UserScopedMixin):
     role = db.Column(db.String(64), nullable=True)
     comment = db.Column(db.String(1024), nullable=True)
     discovery_id = db.Column(db.String(128), nullable=True)
+    # Server type driver key: NULL/'pg'/'ppas' (psycopg3) or 'oracle'
+    # (python-oracledb). NULL keeps the historical auto-detect behaviour.
+    server_type = db.Column(db.String(32), nullable=True)
     db_res = db.Column(db.Text(), nullable=True)
     db_res_type = db.Column(db.String(32), default='databases')
     passexec_cmd = db.Column(db.Text(), nullable=True)
@@ -568,6 +571,7 @@ class SharedServer(db.Model, UserScopedMixin):
     role = db.Column(db.String(64), nullable=True)
     comment = db.Column(db.String(1024), nullable=True)
     discovery_id = db.Column(db.String(128), nullable=True)
+    server_type = db.Column(db.String(32), nullable=True)
     bgcolor = db.Column(db.String(10), nullable=True)
     fgcolor = db.Column(db.String(10), nullable=True)
     service = db.Column(db.Text(), nullable=True)

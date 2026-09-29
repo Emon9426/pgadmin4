@@ -122,7 +122,15 @@ class PGChildModule():
 
         assert (self.server_type is None or isinstance(self.server_type, list))
 
-        if self.server_type is None or manager.server_type in self.server_type:
+        # A module without an explicit server_type list targets the
+        # PostgreSQL family only; other server types (e.g. oracle) must
+        # list themselves explicitly to appear in the browser tree.
+        if self.server_type is None:
+            supported_types = ['pg', 'ppas']
+        else:
+            supported_types = self.server_type
+
+        if manager.server_type in supported_types:
             min_server_version = self.min_ver
             max_server_version = self.max_ver
             if manager.server_type == 'ppas':

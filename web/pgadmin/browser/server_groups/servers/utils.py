@@ -572,6 +572,11 @@ def update_session_manager(user_id=None, servers=None):
 
 
 def get_replication_type(conn, sversion):
+    # Oracle servers do not support physical replication detection.
+    if getattr(getattr(conn, 'manager', None), 'server_type', None) \
+            == 'oracle':
+        return None
+
     status, res = conn.execute_dict(render_template(
         "/servers/sql/#{0}#/replication_type.sql".format(sversion)
     ))

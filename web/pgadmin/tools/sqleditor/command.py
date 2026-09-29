@@ -865,6 +865,11 @@ class QueryToolCommand(BaseCommand, FetchedRowTracker):
         manager = driver.connection_manager(self.sid)
         conn = manager.connection(did=self.did, conn_id=self.conn_id)
 
+        # Updatable resultsets rely on PostgreSQL catalog metadata which
+        # Oracle connections do not provide.
+        if getattr(manager, 'server_type', None) == 'oracle':
+            return False
+
         # Get the driver version as a float
         driver_version = float('.'.join(driver.version().split('.')[:2]))
 

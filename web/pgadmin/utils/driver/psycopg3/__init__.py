@@ -35,6 +35,24 @@ from .server_manager import ServerManager
 connection_restore_lock = Lock()
 
 
+def get_driver_type(server_data):
+    """
+    Returns the registered driver key for the given server row.
+    Servers marked with server_type 'oracle' are handled by the oracle
+    driver, everything else (including NULL/legacy rows) uses psycopg3.
+    """
+    if server_data is not None and \
+            getattr(server_data, 'server_type', None) == 'oracle':
+        return 'oracle'
+    return 'psycopg3'
+
+
+def _get_driver(type_):
+    # Imported lazily to avoid a circular import at module load time.
+    from pgadmin.utils.driver import get_driver
+    return get_driver(type_)
+
+
 class Driver(BaseDriver):
     """
     class Driver(BaseDriver):
@@ -82,6 +100,9 @@ class Driver(BaseDriver):
                 servers = get_user_server_query().filter(
                     Server.is_adhoc == 0)
                 for server in servers:
+                    # Oracle servers are managed by the oracle driver.
+                    if get_driver_type(server) == 'oracle':
+                        continue
                     manager = managers[str(server.id)] = \
                         ServerManager(server)
                     # Suppress passexec for non-owners of shared
@@ -133,6 +154,11 @@ class Driver(BaseDriver):
             server_data = Server.query.filter_by(id=sid).first()
             if server_data is None:
                 return None
+
+        # Oracle servers are served by the oracle driver; dispatch before
+        # touching any of the psycopg3 specific state below.
+        if get_driver_type(server_data) == 'oracle':
+            return _get_driver('oracle').connection_manager(sid)
 
         if session.sid not in self.managers:
             with connection_restore_lock:
@@ -259,6 +285,16 @@ class Driver(BaseDriver):
         """
         Delete manager for given server id.
         """
+        # Route to the oracle driver for oracle servers so its cache is
+        # cleaned up too.
+        try:
+            server = Server.query.filter_by(id=sid).first()
+            if get_driver_type(server) == 'oracle':
+                _get_driver('oracle').delete_manager(sid)
+                return
+        except NotImplementedError:
+            pass
+
         manager = self.connection_manager(sid)
         if manager is not None:
             manager.release()
@@ -277,6 +313,12 @@ class Driver(BaseDriver):
         session_idle_timeout = datetime.timedelta(minutes=max_idle_time)
 
         curr_time = datetime.datetime.now()
+
+        # Also GC any oracle driver connections.
+        try:
+            _get_driver('oracle').gc_timeout()
+        except NotImplementedError:
+            pass
 
         for sess in self.managers:
             sess_mgr = self.managers[sess]
@@ -298,6 +340,11 @@ class Driver(BaseDriver):
         connections (except dedicated connections created by utilities
         like backup, restore etc) of all servers for current user.
         """
+        # Also release oracle driver connections for this session.
+        try:
+            _get_driver('oracle').gc_own()
+        except NotImplementedError:
+            pass
 
         sess_mgr = self.managers.get(session.sid, None)
 

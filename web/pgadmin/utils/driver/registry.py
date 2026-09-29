@@ -20,6 +20,9 @@ def load_modules(cls, app=None):
     from . import psycopg3 as module
     submodules.append(module)
 
+    from . import oracle as module
+    submodules.append(module)
+
     from . import abstract as module
     submodules.append(module)
 

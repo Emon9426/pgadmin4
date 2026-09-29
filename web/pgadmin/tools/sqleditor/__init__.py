@@ -1460,6 +1460,15 @@ def fetch_pg_types(columns_info, trans_obj):
 
     oids = [columns_info[col]['type_code'] for col in columns_info]
 
+    # Oracle connections have no pg_catalog; the driver already reports
+    # the type name as the type code.
+    if getattr(manager, 'server_type', None) == 'oracle':
+        return True, [
+            {'oid': columns_info[col]['type_code'],
+             'typname': columns_info[col]['type_code']}
+            for col in columns_info
+        ]
+
     if oids:
         status, res = default_conn.execute_dict(
             "SELECT oid, pg_catalog.format_type(oid, NULL) AS typname FROM "
@@ -2099,6 +2108,13 @@ def auto_complete(trans_id):
 
     if status and conn is not None and \
             trans_obj is not None and session_obj is not None:
+
+        # Autocomplete is driven by PostgreSQL catalogs; return an empty
+        # suggestion set for Oracle connections instead of erroring on
+        # every keystroke.
+        if getattr(conn.manager, 'server_type', None) == 'oracle':
+            return make_json_response(
+                data={'status': True, 'result': {}})
 
         with sqleditor_close_session_lock:
             if trans_id not in auto_complete_objects:

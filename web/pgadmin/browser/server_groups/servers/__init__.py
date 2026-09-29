@@ -83,6 +83,12 @@ def has_any(data, keys):
 
 
 def recovery_state(connection, postgres_version):
+    # Oracle servers do not have the PostgreSQL recovery catalog; treat
+    # them as always-available.
+    if getattr(getattr(connection, 'manager', None), 'server_type', None) \
+            == 'oracle':
+        return True, None, None, None
+
     recovery_check_sql = render_template(
         "connect/sql/#{0}#/check_recovery.sql".format(postgres_version))
 
@@ -303,7 +309,7 @@ class ServerModule(sg.ServerGroupPluginModule):
             was_connected = False
             in_recovery = None
             wal_paused = None
-            server_type = 'pg'
+            server_type = getattr(server, 'server_type', None) or 'pg'
             user_info = None
 
             if not self.has_tag(server, object_filters):
@@ -384,6 +390,7 @@ class ServerModule(sg.ServerGroupPluginModule):
         app.jinja_env.filters['hasAny'] = has_any
 
         from .ppas import PPAS
+        from .oracle import Oracle
 
         from .databases import blueprint as module
         self.submodules.append(module)
@@ -407,6 +414,9 @@ class ServerModule(sg.ServerGroupPluginModule):
         self.submodules.append(module)
 
         from .pgd_replication_groups import blueprint as module
+        self.submodules.append(module)
+
+        from .oracle_schemas import blueprint as module
         self.submodules.append(module)
 
         super().register(app, options)
@@ -481,7 +491,8 @@ class ServerModule(sg.ServerGroupPluginModule):
                 passexec_expiration=None,
                 kerberos_conn=False,
                 tags=None,
-                post_connection_sql=None
+                post_connection_sql=None,
+                server_type=getattr(data, 'server_type', None)
             )
             db.session.add(shared_server)
             db.session.commit()
@@ -887,7 +898,8 @@ class ServerNode(PGChildNodeView):
             'connection_params': 'connection_params',
             'prepare_threshold': 'prepare_threshold',
             'tags': 'tags',
-            'post_connection_sql': 'post_connection_sql'
+            'post_connection_sql': 'post_connection_sql',
+            'server_type': 'server_type'
         }
 
         disp_lbl = {
@@ -896,7 +908,8 @@ class ServerNode(PGChildNodeView):
             'db': gettext('Maintenance database'),
             'username': gettext('Username'),
             'comment': gettext('Comments'),
-            'role': gettext('Role')
+            'role': gettext('Role'),
+            'server_type': gettext('Server type')
         }
 
         data = request.form if request.form else json.loads(
@@ -1046,7 +1059,7 @@ class ServerNode(PGChildNodeView):
 
         if connected:
             for arg in (
-                    'db', 'role', 'service'
+                    'db', 'role', 'service', 'server_type'
             ):
                 if arg in data:
                     return forbidden(
@@ -1175,7 +1188,8 @@ class ServerNode(PGChildNodeView):
             'role': server.role,
             'connected': connected,
             'version': manager.ver,
-            'server_type': manager.server_type if connected else 'pg',
+            'server_type': manager.server_type if connected else (
+                getattr(server, 'server_type', None) or 'pg'),
             'bgcolor': server.bgcolor,
             'fgcolor': server.fgcolor,
             'db_res': get_db_restriction(server.db_res_type, server.db_res),
@@ -1208,6 +1222,10 @@ class ServerNode(PGChildNodeView):
 
     @staticmethod
     def update_connection_string(manager, server):
+        # Oracle managers keep a plain display string, not a libpq DSN.
+        if getattr(manager, 'server_type', None) == 'oracle':
+            return manager.display_connection_string
+
         # Get current connection info in dict.
         con_info = conninfo_to_dict(manager.display_connection_string)
         db_name = con_info['dbname'] if 'dbname' in con_info else None
@@ -1314,6 +1332,7 @@ class ServerNode(PGChildNodeView):
                 config.ALLOW_SAVE_PASSWORD else 0,
                 comment=data.get('comment', None),
                 role=data.get('role', None),
+                server_type=data.get('server_type', None),
                 db_res=db_restriction,
                 db_res_type=data.get('db_res_type', None),
                 bgcolor=data.get('bgcolor', None),

@@ -62,6 +62,13 @@ def check_precondition(f):
         if not g.conn.connected():
             return get_error(node_type)
 
+        # Dashboard statistics are PostgreSQL specific.
+        if g.manager.server_type == 'oracle':
+            return precondition_required(
+                gettext("Dashboard statistics are not available for "
+                        "Oracle connections.")
+            )
+
         # Set template path for sql scripts
         g.server_type = g.manager.server_type
         g.version = g.manager.version
