@@ -179,7 +179,10 @@ def main():
     args = parser.parse_args()
 
     repo = os.path.abspath(args.repo)
-    out_dir = os.path.abspath(args.out_dir or os.path.join(repo, 'dist'))
+    # Finished zips land in <repo>/release (gitignored) so they are ready
+    # to attach to a GitHub Release; staging and the download cache stay
+    # out of the way under dist/.
+    out_dir = os.path.abspath(args.out_dir or os.path.join(repo, 'release'))
     cache_dir = os.path.abspath(
         args.cache_dir or os.path.join(repo, 'dist', 'cache'))
 
